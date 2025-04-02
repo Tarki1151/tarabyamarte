@@ -1,0 +1,1616 @@
+###############################################################################
+#                                                                             #
+#                    SPOR SALONU YÖNETİM UYGULAMASI KODLARI                   #
+#                                                                             #
+###############################################################################
+
+# ===========================================================================
+#                          BACKEND DOSYALARI (`backend/`)
+# ===========================================================================
+
+
+########## FILE: backend/requirements.txt ##########
+
+# Temel Django ve API kütüphaneleri
+django
+djangorestframework
+django-cors-headers
+
+# PostgreSQL kullanacaksanız (Render deploy veya lokal PG için)
+psycopg2-binary # PostgreSQL sürücüsü eklendi
+
+# Render'a deploy ederken veya üretim ortamında gerekebilecekler
+# gunicorn
+# dj-database-url
+# whitenoise
+
+
+########## FILE: backend/gym_project/settings.py ##########
+
+# backend/gym_project/settings.py
+
+import os
+from pathlib import Path
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent # Bu dosyanın iki üst dizini (backend klasörü)
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = 'django-insecure-=!#(YERINE_GÜVENLİ_BİR_ANAHTAR_KOYUN)!#=' # Lütfen bunu değiştirin!
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = True # Lokal geliştirme için
+
+ALLOWED_HOSTS = [] # Canlıda alan adınızı ekleyin
+
+
+# Application definition
+
+INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.staticfiles',
+    # Üçüncü parti uygulamalar
+    'rest_framework',
+    'rest_framework.authtoken',
+    'corsheaders',
+    # Kendi uygulamamız
+    'gym_app', # Uygulama adımız
+]
+
+MIDDLEWARE = [
+    'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
+    'corsheaders.middleware.CorsMiddleware', # CORS eklendi
+    'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+]
+
+ROOT_URLCONF = 'gym_project.urls' # Ana urls.py dosyamız
+
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+
+WSGI_APPLICATION = 'gym_project.wsgi.application'
+
+
+# Database
+# Lokal geliştirme için SQLite (daha kolay başlangıç)
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3', # db.sqlite3 dosyası backend klasöründe oluşacak
+#     }
+# }
+
+# PostgreSQL için ayar (kullanıcıdan gelen bilgilerle)
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': 'gym_db',         # PostgreSQL'de oluşturduğunuz veritabanının adı
+        'USER': 'gymadm',         # Sağladığınız kullanıcı adı
+        'PASSWORD': 'man4763!',   # Sağladığınız şifre
+        'HOST': 'localhost',      # Veritabanı sunucusunun adresi (Lokal için)
+        'PORT': '5432',           # PostgreSQL varsayılan portu
+    }
+}
+# Render deploy için DATABASE_URL çevre değişkenini kullanmak daha iyidir.
+# import dj_database_url
+# if 'DATABASE_URL' in os.environ:
+#     DATABASES['default'] = dj_database_url.config(conn_max_age=600, ssl_require=True)
+
+
+# Password validation
+AUTH_PASSWORD_VALIDATORS = [
+    { 'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator', },
+    { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
+]
+
+
+# Internationalization
+LANGUAGE_CODE = 'tr-tr'
+TIME_ZONE = 'Europe/Istanbul'
+USE_I18N = True
+USE_L10N = True
+USE_TZ = True
+
+
+# Static files (CSS, JavaScript, Images)
+STATIC_URL = '/static/'
+# STATIC_ROOT = BASE_DIR / 'staticfiles' # Render deploy için
+
+
+# Default primary key field type
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# Özel Kullanıcı Modeli Ayarı
+AUTH_USER_MODEL = 'gym_app.CustomUser'
+
+# Django REST Framework Ayarları
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ]
+}
+
+# CORS Ayarları
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173", # Vite React uygulamasının varsayılan adresi
+    "http://127.0.0.1:5173",
+    # Canlı frontend adresini de ekleyebilirsiniz
+]
+# Veya DEBUG True iken:
+# CORS_ALLOW_ALL_ORIGINS = True
+
+
+########## FILE: backend/gym_project/urls.py ##########
+
+# backend/gym_project/urls.py
+
+from django.contrib import admin
+from django.urls import path, include
+from rest_framework.authtoken import views as authtoken_views # Token Auth için
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+    # gym_app uygulamasının URL'lerini /api/ altında bağlıyoruz
+    path('api/', include('gym_app.urls')),
+    # DRF'in tarayıcı tabanlı API'si için login/logout (opsiyonel)
+    path('api-auth/', include('rest_framework.urls', namespace='rest_framework')),
+    # Token alma endpoint'i (POST isteği ile username/password gönderilir)
+    path('api-token-auth/', authtoken_views.obtain_auth_token, name='api_token_auth'),
+]
+
+
+########## FILE: backend/gym_app/models.py ##########
+
+# backend/gym_app/models.py
+
+from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.conf import settings
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+
+# 1. Özelleştirilmiş Kullanıcı Modeli
+class CustomUser(AbstractUser):
+    ROLE_CHOICES = (
+        ('admin', 'Admin'),
+        ('member', 'Üye'),
+        ('trainer', 'Eğitmen'),
+    )
+    role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='member', verbose_name="Kullanıcı Rolü")
+    phone_number = models.CharField(max_length=20, blank=True, null=True, verbose_name="Telefon Numarası")
+    address = models.TextField(blank=True, null=True, verbose_name="Adres")
+
+    def __str__(self):
+        return f"{self.get_full_name() or self.username} ({self.get_role_display()})"
+
+    class Meta:
+        verbose_name = "Kullanıcı"
+        verbose_name_plural = "Kullanıcılar"
+
+# 3. Spor Programı Modeli
+class SportProgram(models.Model):
+    name = models.CharField(max_length=100, unique=True, verbose_name="Program Adı")
+    description = models.TextField(blank=True, null=True, verbose_name="Açıklama")
+    is_active = models.BooleanField(default=True, verbose_name="Aktif Mi?")
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        verbose_name = "Spor Programı"
+        verbose_name_plural = "Spor Programları"
+        ordering = ['name']
+
+# 4. Üyelik Planı Modeli
+class MembershipPlan(models.Model):
+    PLAN_TYPE_CHOICES = (
+        ('days', 'Gün Bazlı'),
+        ('sessions', 'Ders Sayısı Bazlı'),
+    )
+    name = models.CharField(max_length=150, unique=True, verbose_name="Plan Adı")
+    plan_type = models.CharField(max_length=10, choices=PLAN_TYPE_CHOICES, verbose_name="Plan Tipi")
+    duration_days = models.PositiveIntegerField(blank=True, null=True, verbose_name="Süre (Gün)", help_text="Gün bazlı planlar için geçerlidir.")
+    session_count = models.PositiveIntegerField(blank=True, null=True, verbose_name="Ders Sayısı", help_text="Ders sayısı bazlı planlar için geçerlidir.")
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="Fiyat")
+    is_active = models.BooleanField(default=True, verbose_name="Aktif Mi?")
+
+    def __str__(self):
+        if self.plan_type == 'days':
+            return f"{self.name} ({self.duration_days} Gün)"
+        else:
+            return f"{self.name} ({self.session_count} Ders)"
+
+    class Meta:
+        verbose_name = "Üyelik Planı"
+        verbose_name_plural = "Üyelik Planları"
+        ordering = ['name']
+
+# 5. Üyelik Modeli
+class Membership(models.Model):
+    member = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='memberships', limit_choices_to={'role': 'member'}, verbose_name="Üye")
+    plan = models.ForeignKey(MembershipPlan, on_delete=models.PROTECT, related_name='members', verbose_name="Üyelik Planı")
+    start_date = models.DateField(default=timezone.now, verbose_name="Başlangıç Tarihi")
+    end_date = models.DateField(blank=True, null=True, verbose_name="Bitiş Tarihi")
+    remaining_sessions = models.PositiveIntegerField(blank=True, null=True, verbose_name="Kalan Ders Sayısı")
+    is_active = models.BooleanField(default=True, verbose_name="Aktif Üyelik Mi?")
+
+    def save(self, *args, **kwargs):
+        is_new = self.pk is None
+        update_fields = kwargs.get('update_fields', None)
+        if is_new or (update_fields and 'plan' in update_fields):
+             if self.plan.plan_type == 'days' and self.plan.duration_days:
+                 self.end_date = self.start_date + timezone.timedelta(days=self.plan.duration_days)
+                 self.remaining_sessions = None
+             elif self.plan.plan_type == 'sessions' and self.plan.session_count:
+                 self.remaining_sessions = self.plan.session_count
+                 self.end_date = None
+
+        if update_fields is None or 'is_active' in update_fields:
+            if self.is_expired:
+                self.is_active = False
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.member.get_full_name() or self.member.username} - {self.plan.name}"
+
+    @property
+    def remaining_days(self):
+        if self.plan.plan_type == 'days' and self.end_date:
+            today = timezone.now().date()
+            if self.is_active and self.end_date >= today and self.start_date <= today:
+                return (self.end_date - today).days
+        return 0
+
+    @property
+    def is_expired(self):
+        today = timezone.now().date()
+        if self.plan.plan_type == 'days' and self.end_date and self.end_date < today:
+            return True
+        if self.plan.plan_type == 'sessions' and self.remaining_sessions is not None and self.remaining_sessions <= 0:
+            return True
+        if not self.is_active:
+             if self.start_date > today:
+                 return False
+             return True
+        return False
+
+    class Meta:
+        verbose_name = "Üyelik"
+        verbose_name_plural = "Üyelikler"
+        ordering = ['-start_date', 'member']
+
+# 6. Randevu/Ders Kaydı Modeli
+class Appointment(models.Model):
+    member = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='appointments', limit_choices_to={'role': 'member'}, verbose_name="Üye")
+    program = models.ForeignKey(SportProgram, on_delete=models.CASCADE, related_name='appointments', verbose_name="Spor Programı")
+    appointment_datetime = models.DateTimeField(verbose_name="Randevu Zamanı")
+    attended = models.BooleanField(default=False, verbose_name="Katıldı Mı?")
+    created_at = models.DateTimeField(auto_now_add=True)
+    _original_attended = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._original_attended = self.attended
+
+    def save(self, *args, **kwargs):
+        if self.attended and not self._original_attended:
+            try:
+                membership = Membership.objects.filter(
+                    member=self.member,
+                    plan__plan_type='sessions',
+                    is_active=True,
+                    start_date__lte=self.appointment_datetime.date(),
+                    remaining_sessions__gt=0
+                ).order_by('start_date').first()
+
+                if membership:
+                    membership.remaining_sessions -= 1
+                    if membership.remaining_sessions <= 0:
+                        membership.is_active = False
+                    membership.save(update_fields=['remaining_sessions', 'is_active'])
+                    print(f"Üye {self.member.username} için kalan seans: {membership.remaining_sessions}")
+                else:
+                    print(f"HATA: Üye {self.member.username} için katılım kaydedilecek uygun seans bazlı üyelik bulunamadı!")
+                    # self.attended = False # Hakkı yoksa katılmış sayma
+
+            except Exception as e:
+                print(f"HATA: Kalan seans düşürülürken hata oluştu: {e}")
+                pass
+
+        super().save(*args, **kwargs)
+        self._original_attended = self.attended
+
+    def __str__(self):
+        return f"{self.member.username} - {self.program.name} - {self.appointment_datetime.strftime('%Y-%m-%d %H:%M')}"
+
+    class Meta:
+        verbose_name = "Randevu / Ders Kaydı"
+        verbose_name_plural = "Randevular / Ders Kayıtları"
+        ordering = ['-appointment_datetime']
+        constraints = [
+            models.UniqueConstraint(fields=['member', 'appointment_datetime'], name='unique_appointment_time_for_member')
+        ]
+
+# 7. Genel Ayarlar Modeli
+class GymSetting(models.Model):
+    key = models.CharField(max_length=50, unique=True, primary_key=True, verbose_name="Ayar Adı")
+    value = models.TextField(verbose_name="Ayar Değeri")
+
+    def __str__(self):
+        return self.key
+
+    class Meta:
+        verbose_name = "Genel Ayar"
+        verbose_name_plural = "Genel Ayarlar"
+
+
+########## FILE: backend/gym_app/admin.py ##########
+
+# backend/gym_app/admin.py
+
+from django.contrib import admin
+from django.contrib.auth.admin import UserAdmin
+from .models import CustomUser, SportProgram, MembershipPlan, Membership, Appointment, GymSetting
+
+class CustomUserAdmin(UserAdmin):
+    fieldsets = (
+        (None, {'fields': ('username', 'password')}),
+        ('Personal info', {'fields': ('first_name', 'last_name', 'email', 'phone_number', 'address')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions', 'role')}),
+        ('Important dates', {'fields': ('last_login', 'date_joined')}),
+    )
+    add_fieldsets = UserAdmin.add_fieldsets + (
+        (None, {'fields': ('role', 'first_name', 'last_name', 'email')}),
+    )
+    list_display = ('username', 'email', 'first_name', 'last_name', 'role', 'is_staff', 'is_active')
+    list_filter = ('role', 'is_staff', 'is_active')
+    search_fields = ('username', 'first_name', 'last_name', 'email')
+    ordering = ('username',)
+
+@admin.register(SportProgram)
+class SportProgramAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_active')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'description')
+    ordering = ('name',)
+
+@admin.register(MembershipPlan)
+class MembershipPlanAdmin(admin.ModelAdmin):
+    list_display = ('name', 'plan_type', 'duration_days', 'session_count', 'price', 'is_active')
+    list_filter = ('plan_type', 'is_active')
+    search_fields = ('name',)
+    ordering = ('name',)
+
+@admin.register(Membership)
+class MembershipAdmin(admin.ModelAdmin):
+    list_display = ('member', 'plan', 'start_date', 'end_date', 'remaining_sessions', 'is_active', 'remaining_days_display', 'is_expired_display')
+    list_filter = ('plan', 'is_active', 'start_date', 'end_date')
+    search_fields = ('member__username', 'member__first_name', 'member__last_name', 'plan__name')
+    ordering = ('-start_date',)
+    date_hierarchy = 'start_date'
+    readonly_fields = ('end_date', 'remaining_sessions', 'remaining_days', 'is_expired')
+
+    def remaining_days_display(self, obj):
+        return obj.remaining_days
+    remaining_days_display.short_description = "Kalan Gün"
+
+    def is_expired_display(self, obj):
+        return obj.is_expired
+    is_expired_display.short_description = "Süresi Doldu Mu?"
+    is_expired_display.boolean = True
+
+@admin.register(Appointment)
+class AppointmentAdmin(admin.ModelAdmin):
+    list_display = ('member', 'program', 'appointment_datetime', 'attended')
+    list_filter = ('program', 'attended', 'appointment_datetime')
+    search_fields = ('member__username', 'member__first_name', 'program__name')
+    ordering = ('-appointment_datetime',)
+    date_hierarchy = 'appointment_datetime'
+    list_editable = ('attended',)
+
+@admin.register(GymSetting)
+class GymSettingAdmin(admin.ModelAdmin):
+    list_display = ('key', 'value')
+    search_fields = ('key',)
+
+admin.site.register(CustomUser, CustomUserAdmin)
+
+
+########## FILE: backend/gym_app/serializers.py ##########
+
+# backend/gym_app/serializers.py
+
+from rest_framework import serializers
+from django.utils import timezone
+from .models import CustomUser, SportProgram, MembershipPlan, Membership, Appointment
+
+class CustomUserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CustomUser
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name',
+            'role', 'phone_number', 'address', 'is_active', 'date_joined'
+        ]
+        read_only_fields = ['id', 'role', 'is_active', 'date_joined']
+
+class SportProgramSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SportProgram
+        fields = ['id', 'name', 'description', 'is_active']
+
+class MembershipPlanSerializer(serializers.ModelSerializer):
+    plan_type_display = serializers.CharField(source='get_plan_type_display', read_only=True)
+    class Meta:
+        model = MembershipPlan
+        fields = [
+            'id', 'name', 'plan_type', 'plan_type_display',
+            'duration_days', 'session_count', 'price', 'is_active'
+        ]
+
+class MembershipSerializer(serializers.ModelSerializer):
+    plan = MembershipPlanSerializer(read_only=True)
+    remaining_days = serializers.IntegerField(read_only=True)
+    is_expired = serializers.BooleanField(read_only=True)
+
+    class Meta:
+        model = Membership
+        fields = [
+            'id', 'plan', 'start_date', 'end_date',
+            'remaining_sessions', 'is_active', 'remaining_days', 'is_expired'
+        ]
+        read_only_fields = ['id', 'plan', 'start_date', 'end_date', 'remaining_sessions', 'is_active', 'remaining_days', 'is_expired']
+
+class AppointmentSerializer(serializers.ModelSerializer):
+    program_name = serializers.CharField(source='program.name', read_only=True)
+    member_name = serializers.CharField(source='member.get_full_name', read_only=True)
+    member = CustomUserSerializer(read_only=True)
+    program = serializers.PrimaryKeyRelatedField(queryset=SportProgram.objects.filter(is_active=True))
+
+    class Meta:
+        model = Appointment
+        fields = [
+            'id', 'member', 'member_name', 'program', 'program_name',
+            'appointment_datetime', 'attended', 'created_at'
+        ]
+        read_only_fields = ['id', 'member', 'member_name', 'program_name', 'attended', 'created_at']
+
+    def validate_appointment_datetime(self, value):
+        if value < timezone.now():
+            raise serializers.ValidationError("Geçmiş bir tarihe randevu alamazsınız.")
+        return value
+
+    def validate(self, data):
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+             return data
+        member = request.user
+        appointment_time = data.get('appointment_datetime')
+
+        if member.role != 'member':
+             raise serializers.ValidationError("Sadece üyeler randevu alabilir.")
+
+        active_memberships = Membership.objects.filter(
+            member=member,
+            is_active=True,
+            start_date__lte=appointment_time.date()
+        )
+
+        valid_membership_found = False
+        for membership in active_memberships:
+            if membership.plan.plan_type == 'days':
+                if membership.end_date and membership.end_date >= appointment_time.date():
+                    valid_membership_found = True
+                    break
+            elif membership.plan.plan_type == 'sessions':
+                if membership.remaining_sessions is not None and membership.remaining_sessions > 0:
+                    valid_membership_found = True
+                    break
+
+        if not valid_membership_found:
+            raise serializers.ValidationError("Randevu almak için geçerli ve aktif bir üyeliğiniz bulunmamaktadır veya hakkınız bitmiştir.")
+
+        instance = getattr(self, 'instance', None)
+        queryset = Appointment.objects.filter(
+            member=member,
+            appointment_datetime=appointment_time
+        )
+        if instance:
+            queryset = queryset.exclude(pk=instance.pk)
+
+        if queryset.exists():
+             raise serializers.ValidationError("Bu zaman dilimi için zaten bir randevunuz bulunmaktadır.")
+
+        return data
+
+
+########## FILE: backend/gym_app/views.py ##########
+
+# backend/gym_app/views.py
+
+from rest_framework import viewsets, permissions, status
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from .models import SportProgram, MembershipPlan, Membership, Appointment, CustomUser
+from .serializers import (
+    CustomUserSerializer, SportProgramSerializer, MembershipPlanSerializer,
+    MembershipSerializer, AppointmentSerializer
+)
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
+
+class IsMemberUser(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.role == 'member'
+
+class IsAdminRoleUser(permissions.BasePermission):
+     def has_permission(self, request, view):
+         return request.user.is_authenticated and request.user.role == 'admin'
+
+class SportProgramViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = SportProgram.objects.filter(is_active=True)
+    serializer_class = SportProgramSerializer
+    permission_classes = [IsAuthenticated]
+
+class MembershipPlanViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = MembershipPlan.objects.filter(is_active=True)
+    serializer_class = MembershipPlanSerializer
+    permission_classes = [IsAuthenticated]
+
+class CurrentUserView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        serializer = CustomUserSerializer(request.user, context={'request': request})
+        return Response(serializer.data)
+
+class MemberMembershipViewSet(viewsets.ReadOnlyModelViewSet):
+    serializer_class = MembershipSerializer
+    permission_classes = [IsMemberUser]
+
+    def get_queryset(self):
+        return Membership.objects.filter(member=self.request.user)
+
+class MemberAppointmentViewSet(viewsets.ModelViewSet):
+    serializer_class = AppointmentSerializer
+    permission_classes = [IsMemberUser]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        return Appointment.objects.filter(member=self.request.user)
+
+    def perform_create(self, serializer):
+        serializer.save(member=self.request.user)
+
+
+########## FILE: backend/gym_app/urls.py ##########
+
+# backend/gym_app/urls.py
+
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    SportProgramViewSet, MembershipPlanViewSet, CurrentUserView,
+    MemberMembershipViewSet, MemberAppointmentViewSet
+)
+
+router = DefaultRouter()
+router.register(r'programs', SportProgramViewSet, basename='sportprogram')
+router.register(r'plans', MembershipPlanViewSet, basename='membershipplan')
+router.register(r'memberships', MemberMembershipViewSet, basename='member-membership')
+router.register(r'appointments', MemberAppointmentViewSet, basename='member-appointment')
+
+urlpatterns = [
+    path('', include(router.urls)),
+    path('users/me/', CurrentUserView.as_view(), name='current-user'),
+]
+
+
+# ===========================================================================
+#                         FRONTEND DOSYALARI (`frontend/`)
+# ===========================================================================
+
+
+########## FILE: frontend/tailwind.config.js ##########
+
+/** @type {import('tailwindcss').Config} */
+export default {
+  content: [
+    "./index.html",
+    "./src/**/*.{js,ts,jsx,tsx}",
+  ],
+  theme: {
+    extend: {},
+  },
+  plugins: [],
+}
+
+
+########## FILE: frontend/postcss.config.js ##########
+
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+
+
+########## FILE: frontend/src/index.css ##########
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  @apply font-sans antialiased bg-gray-100 text-gray-900;
+}
+
+
+########## FILE: frontend/src/main.jsx ##########
+
+import React from 'react'
+import ReactDOM from 'react-dom/client'
+import App from './App.jsx'
+import './index.css'
+import { BrowserRouter } from 'react-router-dom';
+import { AuthProvider } from './contexts/AuthContext';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <App />
+      </AuthProvider>
+    </BrowserRouter>
+  </React.StrictMode>,
+)
+
+
+########## FILE: frontend/src/App.jsx ##########
+
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import ProgramsListPage from './pages/ProgramsListPage';
+import MemberAppointmentsPage from './pages/MemberAppointmentsPage';
+import BookAppointmentPage from './pages/BookAppointmentPage';
+import MemberMembershipsPage from './pages/MemberMembershipsPage';
+import PrivateRoute from './components/PrivateRoute';
+import Layout from './components/Layout';
+
+function App() {
+  return (
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route
+        path="/"
+        element={
+          <PrivateRoute>
+            <Layout />
+          </PrivateRoute>
+        }
+      >
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="programs" element={<ProgramsListPage />} />
+          <Route path="my-memberships" element={<MemberMembershipsPage />} />
+          <Route path="my-appointments" element={<MemberAppointmentsPage />} />
+          <Route path="book-appointment" element={<BookAppointmentPage />} />
+      </Route>
+    </Routes>
+  );
+}
+
+export default App;
+
+
+########## FILE: frontend/src/contexts/AuthContext.jsx ##########
+
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import apiClient, { getCurrentUser } from '../services/api';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAuthStatus = async () => {
+      setLoading(true);
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const response = await getCurrentUser();
+          setUser(response.data);
+          setIsAuthenticated(true);
+        } catch (error) {
+          console.error("Auth check failed:", error);
+          localStorage.removeItem('authToken');
+          setIsAuthenticated(false);
+          setUser(null);
+        }
+      } else {
+          setIsAuthenticated(false);
+          setUser(null);
+      }
+      setLoading(false);
+    };
+    checkAuthStatus();
+  }, []);
+
+  const login = async (token) => {
+    localStorage.setItem('authToken', token);
+    try {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        const response = await getCurrentUser();
+        setUser(response.data);
+        setIsAuthenticated(true);
+    } catch(error) {
+        console.error("Failed to fetch user after login:", error);
+        localStorage.removeItem('authToken');
+        setIsAuthenticated(false);
+        setUser(null);
+        throw error;
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('authToken');
+    setIsAuthenticated(false);
+    setUser(null);
+  };
+
+   if (loading) {
+     return <div className="flex justify-center items-center min-h-screen">Uygulama Yükleniyor...</div>;
+   }
+
+  return (
+    <AuthContext.Provider value={{ isAuthenticated, user, login, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+
+########## FILE: frontend/src/services/api.js ##########
+
+import axios from 'axios';
+
+// Lokal backend adresiniz
+const API_BASE_URL = 'http://127.0.0.1:8000/api';
+// Render'a deploy edince burayı değiştirin veya çevre değişkeni kullanın
+// const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api';
+
+
+const apiClient = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      config.headers['Authorization'] = `Token ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      console.log('Token geçersiz veya süresi dolmuş, logout yapılıyor.');
+      localStorage.removeItem('authToken');
+      // window.location.href = '/login'; // Sayfa yenilemesi yapar
+    }
+    return Promise.reject(error);
+  }
+);
+
+export const loginUser = (credentials) => {
+  return axios.post(`${API_BASE_URL}/api-token-auth/`, credentials);
+};
+
+export const getCurrentUser = () => {
+  return apiClient.get('/users/me/');
+};
+
+export const getPrograms = () => {
+  return apiClient.get('/programs/');
+};
+
+export const getPlans = () => {
+  return apiClient.get('/plans/');
+};
+
+export const getMyMemberships = () => {
+    return apiClient.get('/memberships/');
+};
+
+export const getMyAppointments = () => {
+    return apiClient.get('/appointments/');
+};
+
+export const createAppointment = (appointmentData) => {
+    return apiClient.post('/appointments/', appointmentData);
+};
+
+export default apiClient;
+
+
+########## FILE: frontend/src/components/PrivateRoute.jsx ##########
+
+import React from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+
+function PrivateRoute({ children }) {
+  const { isAuthenticated, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return <div className="flex justify-center items-center min-h-screen">Oturum durumu kontrol ediliyor...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+
+  return children;
+}
+
+export default PrivateRoute;
+
+
+########## FILE: frontend/src/components/Layout.jsx ##########
+
+import React from 'react';
+import { Link, Outlet, useNavigate, NavLink } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
+
+function Layout() {
+    const navigate = useNavigate();
+    const { user, logout } = useAuth();
+
+    const handleLogout = () => {
+        logout();
+        navigate('/login');
+    };
+
+    const activeClassName = "bg-gray-900 text-white";
+    const inactiveClassName = "text-gray-300 hover:bg-gray-700 hover:text-white";
+    const getNavLinkClass = ({ isActive }) =>
+        `block py-2 px-4 rounded ${isActive ? activeClassName : inactiveClassName}`;
+
+  return (
+    <div className="flex h-screen bg-gray-100">
+      <aside className="w-64 bg-gray-800 text-white flex flex-col flex-shrink-0">
+        <div className="p-4 text-2xl font-bold border-b border-gray-700 text-center">Gym Yönetim</div>
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+          <NavLink to="/dashboard" className={getNavLinkClass}>Gösterge Paneli</NavLink>
+          <NavLink to="/programs" className={getNavLinkClass}>Programlar</NavLink>
+
+          {user?.role === 'member' && (
+            <>
+              <NavLink to="/my-memberships" className={getNavLinkClass}>Üyeliklerim</NavLink>
+              <NavLink to="/my-appointments" className={getNavLinkClass}>Randevularım</NavLink>
+              <NavLink to="/book-appointment" className={getNavLinkClass}>Yeni Randevu</NavLink>
+            </>
+          )}
+
+           {user?.role === 'admin' && (
+            <>
+              {/* <NavLink to="/admin/users" className={getNavLinkClass}>Kullanıcı Yönetimi</NavLink> */}
+            </>
+          )}
+        </nav>
+        <div className="p-4 border-t border-gray-700 mt-auto">
+            {user && <p className="text-sm mb-2 text-center text-gray-400">Giriş: {user.username} ({user.role})</p>}
+            <button
+                onClick={handleLogout}
+                className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out"
+            >
+                Çıkış Yap
+            </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-200 p-6">
+          <Outlet />
+        </div>
+      </main>
+    </div>
+  );
+}
+
+export default Layout;
+
+
+########## FILE: frontend/src/pages/LoginPage.jsx ##########
+
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { loginUser } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+
+function LoginPage() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const auth = useAuth();
+
+  const from = location.state?.from?.pathname || "/dashboard";
+
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      const response = await loginUser({ username, password });
+      if (response.data.token) {
+        await auth.login(response.data.token);
+        navigate(from, { replace: true });
+      } else {
+        setError('Giriş başarısız. Token alınamadı.');
+      }
+    } catch (err) {
+      console.error("Login error:", err.response || err);
+      setError('Giriş başarısız. Kullanıcı adı veya şifre hatalı.');
+    } finally {
+        setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-200">
+      <form onSubmit={handleLogin} className="p-8 bg-white rounded shadow-md w-full max-w-sm">
+        <h2 className="text-2xl font-bold mb-6 text-center">Giriş Yap</h2>
+        {error && <p className="text-red-500 text-sm mb-4 text-center">{error}</p>}
+         <div className="mb-4">
+          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
+            Kullanıcı Adı
+          </label>
+          <input
+            type="text"
+            id="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            required
+            disabled={loading}
+          />
+        </div>
+        <div className="mb-6">
+          <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="password">
+            Şifre
+          </label>
+          <input
+            type="password"
+            id="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
+            required
+            disabled={loading}
+          />
+        </div>
+        <div className="flex items-center justify-between">
+          <button
+            type="submit"
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline w-full disabled:opacity-50"
+            disabled={loading}
+          >
+            {loading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export default LoginPage;
+
+
+########## FILE: frontend/src/pages/DashboardPage.jsx ##########
+
+import React from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { useState, useEffect } from 'react';
+import { getMyMemberships, getMyAppointments } from '../services/api';
+import { Link } from 'react-router-dom';
+
+function DashboardPage() {
+   const { user } = useAuth();
+
+   const [activeMembership, setActiveMembership] = useState(null);
+   const [upcomingAppointments, setUpcomingAppointments] = useState([]);
+   const [dataLoading, setDataLoading] = useState(false);
+   const [dataError, setDataError] = useState('');
+
+   useEffect(() => {
+    if (user?.role === 'member') {
+      const fetchMemberData = async () => {
+        setDataLoading(true);
+        setDataError('');
+        try {
+          const [membershipsResponse, appointmentsResponse] = await Promise.all([
+            getMyMemberships(),
+            getMyAppointments()
+          ]);
+
+          const memberships = membershipsResponse.data.results || membershipsResponse.data;
+          const active = memberships.find(m => m.is_active && !m.is_expired);
+          setActiveMembership(active || null);
+
+          const appointments = appointmentsResponse.data.results || appointmentsResponse.data;
+          const upcoming = appointments
+            .filter(a => new Date(a.appointment_datetime) > new Date())
+            .sort((a, b) => new Date(a.appointment_datetime) - new Date(b.appointment_datetime));
+          setUpcomingAppointments(upcoming);
+
+        } catch (err) {
+          console.error("Dashboard data fetch error:", err.response || err);
+          setDataError('Kontrol paneli verileri yüklenirken bir hata oluştu.');
+        } finally {
+          setDataLoading(false);
+        }
+      };
+      fetchMemberData();
+    }
+   }, [user]);
+
+  if (!user) {
+    return <div className="p-4">Kullanıcı bilgisi bekleniyor...</div>;
+  }
+
+  return (
+    <div className="p-6">
+      <h1 className="text-3xl font-bold mb-4">Hoş Geldiniz, {user.first_name || user.username}!</h1>
+      <p className="mb-6">Bu sizin kontrol paneliniz.</p>
+
+      {user.role === 'admin' && (
+          <div className="p-4 bg-green-100 border border-green-300 rounded shadow-sm">
+            <p className="text-green-800 font-semibold">Admin yetkilerine sahipsiniz.</p>
+            <p className="text-sm text-green-700 mt-2">Kullanıcıları, programları ve üyelik planlarını yönetebilirsiniz.</p>
+          </div>
+       )}
+
+       {user.role === 'trainer' && (
+           <div className="p-4 bg-purple-100 border border-purple-300 rounded shadow-sm">
+             <p className="text-purple-800 font-semibold">Eğitmen olarak giriş yaptınız.</p>
+             <p className="text-sm text-purple-700 mt-2">Size atanmış dersleri ve katılımcıları görüntüleyebilirsiniz.</p>
+           </div>
+       )}
+
+      {user.role === 'member' && (
+           <div className="p-4 bg-blue-100 border border-blue-300 rounded shadow-sm">
+             <p className="text-blue-800 font-semibold">Üye olarak giriş yaptınız.</p>
+
+             {dataLoading && <p className="mt-4 text-blue-600">Üyelik ve randevu bilgileriniz yükleniyor...</p>}
+             {dataError && <p className="mt-4 text-red-600">{dataError}</p>}
+
+             {!dataLoading && !dataError && (
+               <div className="mt-4 space-y-4">
+                 <div>
+                   <h2 className="text-lg font-semibold text-blue-900 mb-2">Aktif Üyelik</h2>
+                   {activeMembership ? (
+                     <div className="p-3 bg-white rounded border border-blue-200">
+                       <p><strong>Plan:</strong> {activeMembership.plan.name}</p>
+                       {activeMembership.plan.plan_type === 'days' ? (
+                         <p><strong>Kalan Gün:</strong> {activeMembership.remaining_days} (Bitiş: {new Date(activeMembership.end_date).toLocaleDateString('tr-TR')})</p>
+                       ) : (
+                         <p><strong>Kalan Ders Hakkı:</strong> {activeMembership.remaining_sessions}</p>
+                       )}
+                       <Link to="/my-memberships" className="text-sm text-blue-600 hover:underline mt-1 inline-block">Tüm Üyelikleri Gör</Link>
+                     </div>
+                   ) : (
+                     <p className="text-sm text-gray-600">Aktif bir üyeliğiniz bulunmamaktadır.</p>
+                   )}
+                 </div>
+
+                 <div>
+                   <h2 className="text-lg font-semibold text-blue-900 mb-2">Yaklaşan Randevular</h2>
+                   {upcomingAppointments.length > 0 ? (
+                     <ul className="space-y-2">
+                       {upcomingAppointments.slice(0, 3).map(app => (
+                         <li key={app.id} className="p-3 bg-white rounded border border-blue-200 text-sm">
+                           <strong>{app.program_name}</strong> - {new Date(app.appointment_datetime).toLocaleString('tr-TR', { dateStyle: 'short', timeStyle: 'short' })}
+                         </li>
+                       ))}
+                       {upcomingAppointments.length > 3 && (
+                           <li>
+                               <Link to="/my-appointments" className="text-sm text-blue-600 hover:underline mt-1 inline-block">... ve {upcomingAppointments.length - 3} tane daha. Tümünü Gör</Link>
+                           </li>
+                       )}
+                        <li>
+                            <Link to="/book-appointment" className="text-sm text-green-600 hover:underline mt-2 inline-block font-semibold">Yeni Randevu Al</Link>
+                        </li>
+                     </ul>
+                   ) : (
+                     <>
+                        <p className="text-sm text-gray-600">Yaklaşan bir randevunuz bulunmamaktadır.</p>
+                        <Link to="/book-appointment" className="text-sm text-green-600 hover:underline mt-2 inline-block font-semibold">Yeni Randevu Al</Link>
+                     </>
+                   )}
+                 </div>
+               </div>
+             )}
+           </div>
+       )}
+    </div>
+  );
+}
+
+export default DashboardPage;
+
+
+########## FILE: frontend/src/pages/ProgramsListPage.jsx ##########
+
+import React, { useState, useEffect } from 'react';
+import { getPrograms } from '../services/api';
+
+function ProgramsListPage() {
+  const [programs, setPrograms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      setLoading(true);
+      setError('');
+      try {
+        const response = await getPrograms();
+        setPrograms(response.data.results || response.data);
+      } catch (err) {
+        setError('Programlar yüklenirken bir hata oluştu.');
+        console.error("Program fetch error:", err.response || err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchPrograms();
+  }, []);
+
+  if (loading) return <div className="p-4">Programlar Yükleniyor...</div>;
+  if (error) return <div className="p-4 text-red-500">{error}</div>;
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Spor Programları</h1>
+      {programs.length === 0 ? (
+        <p>Aktif spor programı bulunamadı.</p>
+      ) : (
+        <ul className="space-y-3">
+          {programs.map((program) => (
+            <li key={program.id} className="p-4 bg-white rounded shadow">
+              <h2 className="text-xl font-semibold">{program.name}</h2>
+              {program.description && <p className="text-gray-600 mt-1">{program.description}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+export default ProgramsListPage;
+
+
+########## FILE: frontend/src/pages/MemberMembershipsPage.jsx ##########
+
+import React, { useState, useEffect } from 'react';
+import { getMyMemberships } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+
+function MemberMembershipsPage() {
+  const [memberships, setMemberships] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user?.role === 'member') {
+      const fetchMemberships = async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const response = await getMyMemberships();
+          setMemberships(response.data.results || response.data);
+        } catch (err) {
+          console.error("Membership fetch error:", err.response || err);
+          setError('Üyelik bilgileri yüklenirken bir hata oluştu.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchMemberships();
+    } else {
+      setLoading(false);
+      setMemberships([]);
+    }
+  }, [user]);
+
+  const formatDate = (dateString) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('tr-TR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+  };
+
+  if (loading) {
+    return <div className="p-6 text-center">Üyelikler yükleniyor...</div>;
+  }
+
+  if (error) {
+    return <div className="p-6 text-red-600 text-center">{error}</div>;
+  }
+
+  return (
+    <div className="p-6">
+      <h1 className="text-3xl font-bold mb-6">Üyeliklerim</h1>
+
+      {memberships.length === 0 ? (
+        <p className="text-gray-600">Görüntülenecek bir üyeliğiniz bulunmuyor.</p>
+      ) : (
+        <div className="space-y-4">
+          {memberships.map((membership) => (
+            <div key={membership.id} className={`p-4 rounded shadow-md border-l-4 ${membership.is_active && !membership.is_expired ? 'border-green-500 bg-white' : 'border-gray-400 bg-gray-50 opacity-80'}`}>
+              <h2 className="text-xl font-semibold mb-2">{membership.plan.name}</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                <p><strong>Plan Tipi:</strong> {membership.plan.plan_type_display}</p>
+                <p><strong>Başlangıç Tarihi:</strong> {formatDate(membership.start_date)}</p>
+
+                {membership.plan.plan_type === 'days' && (
+                  <>
+                    <p><strong>Bitiş Tarihi:</strong> {formatDate(membership.end_date)}</p>
+                    <p><strong>Kalan Gün:</strong> {membership.remaining_days >= 0 ? membership.remaining_days : 0}</p>
+                  </>
+                )}
+
+                {membership.plan.plan_type === 'sessions' && (
+                  <p><strong>Kalan Ders Hakkı:</strong> {membership.remaining_sessions ?? '-'}</p>
+                )}
+
+                <p><strong>Durum:</strong>
+                  <span className={`ml-2 font-medium px-2 py-0.5 rounded-full text-xs ${membership.is_active && !membership.is_expired ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {membership.is_active && !membership.is_expired ? 'Aktif' : 'Pasif/Süresi Doldu'}
+                  </span>
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default MemberMembershipsPage;
+
+
+########## FILE: frontend/src/pages/MemberAppointmentsPage.jsx ##########
+
+import React, { useState, useEffect } from 'react';
+import { getMyAppointments } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+import { Link } from 'react-router-dom';
+
+function MemberAppointmentsPage() {
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const { user } = useAuth();
+
+  useEffect(() => {
+    if (user?.role === 'member') {
+      const fetchAppointments = async () => {
+        setLoading(true);
+        setError('');
+        try {
+          const response = await getMyAppointments();
+          setAppointments(response.data.results || response.data);
+        } catch (err) {
+          console.error("Appointment fetch error:", err.response || err);
+          setError('Randevu bilgileri yüklenirken bir hata oluştu.');
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchAppointments();
+    } else {
+      setLoading(false);
+      setAppointments([]);
+    }
+  }, [user]);
+
+  const formatDateTime = (dateTimeString) => {
+    if (!dateTimeString) return '-';
+    return new Date(dateTimeString).toLocaleString('tr-TR', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  if (loading) {
+    return <div className="p-6 text-center">Randevular yükleniyor...</div>;
+  }
+
+  if (error) {
+    return <div className="p-6 text-red-600 text-center">{error}</div>;
+  }
+
+  return (
+    <div className="p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Randevularım</h1>
+        <Link
+            to="/book-appointment"
+            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out"
+        >
+            Yeni Randevu Al
+        </Link>
+      </div>
+
+      {appointments.length === 0 ? (
+        <p className="text-gray-600">Görüntülenecek bir randevunuz bulunmuyor.</p>
+      ) : (
+        <div className="bg-white rounded shadow-md overflow-hidden">
+          <ul className="divide-y divide-gray-200">
+            {appointments.map((appointment) => {
+              const isPast = new Date(appointment.appointment_datetime) < new Date();
+              return (
+                <li key={appointment.id} className={`p-4 flex flex-col md:flex-row justify-between items-start md:items-center ${isPast ? 'bg-gray-50 opacity-75' : ''}`}>
+                  <div className="mb-2 md:mb-0">
+                    <p className="text-lg font-semibold text-gray-800">{appointment.program_name}</p>
+                    <p className="text-sm text-gray-600">{formatDateTime(appointment.appointment_datetime)}</p>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                     {isPast && (
+                       <span className={`font-medium px-2.5 py-0.5 rounded-full text-xs ${appointment.attended ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                         {appointment.attended ? 'Katıldı' : 'Katılmadı'}
+                       </span>
+                     )}
+                     {!isPast && (
+                        <span className="font-medium px-2.5 py-0.5 rounded-full text-xs bg-blue-100 text-blue-800">
+                            Yaklaşan
+                        </span>
+                     )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default MemberAppointmentsPage;
+
+
+########## FILE: frontend/src/pages/BookAppointmentPage.jsx ##########
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getPrograms, createAppointment } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
+
+function BookAppointmentPage() {
+  const [programs, setPrograms] = useState([]);
+  const [selectedProgram, setSelectedProgram] = useState('');
+  const [appointmentDateTime, setAppointmentDateTime] = useState('');
+  const [loadingPrograms, setLoadingPrograms] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      setLoadingPrograms(true);
+      try {
+        const response = await getPrograms();
+        setPrograms(response.data.results || response.data);
+      } catch (err) {
+        console.error("Failed to fetch programs:", err);
+        setError('Spor programları yüklenirken bir hata oluştu.');
+      } finally {
+        setLoadingPrograms(false);
+      }
+    };
+    if (user?.role === 'member') {
+        fetchPrograms();
+    } else {
+        setLoadingPrograms(false);
+    }
+  }, [user]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    setSuccessMessage('');
+    setSubmitting(true);
+
+    if (!selectedProgram || !appointmentDateTime) {
+      setError('Lütfen bir program ve tarih/saat seçin.');
+      setSubmitting(false);
+      return;
+    }
+
+    const appointmentData = {
+      program: parseInt(selectedProgram, 10),
+      appointment_datetime: new Date(appointmentDateTime).toISOString(),
+    };
+
+    try {
+      await createAppointment(appointmentData);
+      setSuccessMessage('Randevunuz başarıyla oluşturuldu!');
+      setSelectedProgram('');
+      setAppointmentDateTime('');
+      // setTimeout(() => navigate('/my-appointments'), 2000);
+    } catch (err) {
+      console.error("Failed to create appointment:", err.response?.data || err);
+      if (err.response?.data) {
+          let errors = Object.entries(err.response.data).map(([key, value]) => {
+              let message = Array.isArray(value) ? value[0] : value;
+              if (key === 'appointment_datetime') key = 'Randevu Zamanı';
+              if (key === 'program') key = 'Program';
+              if (key === 'non_field_errors') return `${message}`;
+              return `${key}: ${message}`;
+          }).join(' ');
+          setError(`Randevu oluşturulamadı: ${errors}`);
+      } else {
+          setError('Randevu oluşturulurken bir hata oluştu. Lütfen tekrar deneyin.');
+      }
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const getMinDateTime = () => {
+      const now = new Date();
+      const offset = now.getTimezoneOffset();
+      const localNow = new Date(now.getTime() - (offset*60*1000));
+      return localNow.toISOString().slice(0, 16);
+  }
+
+  if (loadingPrograms) {
+    return <div className="p-6 text-center">Programlar yükleniyor...</div>;
+  }
+
+  if (user?.role !== 'member') {
+      return <div className="p-6 text-red-500">Bu sayfayı görüntüleme yetkiniz yok.</div>;
+  }
+
+  return (
+    <div className="p-6">
+      <h1 className="text-3xl font-bold mb-6">Yeni Randevu Al</h1>
+
+      <form onSubmit={handleSubmit} className="max-w-lg mx-auto bg-white p-8 rounded shadow-md">
+        {successMessage && (
+          <div className="mb-4 p-3 bg-green-100 text-green-700 border border-green-300 rounded">
+            {successMessage}
+          </div>
+        )}
+        {error && (
+          <div className="mb-4 p-3 bg-red-100 text-red-700 border border-red-300 rounded">
+            {error}
+          </div>
+        )}
+
+        <div className="mb-4">
+          <label htmlFor="program" className="block text-gray-700 text-sm font-bold mb-2">
+            Spor Programı Seçin:
+          </label>
+          <select
+            id="program"
+            value={selectedProgram}
+            onChange={(e) => setSelectedProgram(e.target.value)}
+            className="shadow border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline appearance-none"
+            required
+            disabled={submitting}
+          >
+            <option value="" disabled>-- Bir Program Seçin --</option>
+            {programs.map((program) => (
+              <option key={program.id} value={program.id}>
+                {program.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mb-6">
+          <label htmlFor="appointmentDateTime" className="block text-gray-700 text-sm font-bold mb-2">
+            Randevu Tarihi ve Saati:
+          </label>
+          <input
+            type="datetime-local"
+            id="appointmentDateTime"
+            value={appointmentDateTime}
+            onChange={(e) => setAppointmentDateTime(e.target.value)}
+            min={getMinDateTime()}
+            className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+            required
+            disabled={submitting}
+          />
+           <p className="text-xs text-gray-500 mt-1">Lütfen ileri bir tarih ve saat seçiniz.</p>
+        </div>
+
+        <div className="flex items-center justify-center">
+          <button
+            type="submit"
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-6 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
+            disabled={submitting || !selectedProgram || !appointmentDateTime}
+          >
+            {submitting ? 'Randevu Oluşturuluyor...' : 'Randevu Al'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+export default BookAppointmentPage;
+
+###############################################################################
+#                                                                             #
+#                             DOSYA SONU                                      #
+#                                                                             #
+###############################################################################
+"""
+

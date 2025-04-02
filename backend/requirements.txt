@@ -1,0 +1,12 @@
+# Temel Django ve API kütüphaneleri
+django
+djangorestframework
+django-cors-headers
+
+# PostgreSQL kullanacaksanız (Render deploy veya lokal PG için)
+psycopg2-binary # PostgreSQL sürücüsü eklendi
+
+# Render'a deploy ederken veya üretim ortamında gerekebilecekler
+# gunicorn
+# dj-database-url
+# whitenoise
